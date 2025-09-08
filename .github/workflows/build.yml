@@ -32,7 +32,7 @@ jobs:
         cp dist/QRScanner AppDir/usr/bin/
         mkdir -p AppDir/usr/share/applications
         mkdir -p AppDir/usr/share/icons
-        # Tạo QRScanner.desktop
+        # Tạo file .desktop
         cat > AppDir/usr/share/applications/QRScanner.desktop <<EOF
         [Desktop Entry]
         Type=Application
@@ -41,10 +41,8 @@ jobs:
         Icon=QRScanner
         Categories=Utility;
         EOF
-        # Tạo icon mặc định chữ QRScanner
-        convert -size 256x256 xc:white -gravity center \
-          -pointsize 72 -annotate 0 "QR" QRScanner.png
-        cp QRScanner.png AppDir/usr/share/icons/
+        # Tạo icon placeholder
+        echo "fake icon" > AppDir/usr/share/icons/QRScanner.png
 
     - name: Install appimagetool
       run: |
