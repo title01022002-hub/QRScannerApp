@@ -1,4 +1,4 @@
-name: Build AppImage
+name: Build and Release AppImage
 
 on:
   workflow_dispatch:
@@ -26,13 +26,21 @@ jobs:
       run: |
         pyinstaller --onefile --name QRScanner main.py
 
+    - name: Install ImageMagick & AppImageTool
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y imagemagick wget
+        wget https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage -O appimagetool
+        chmod +x appimagetool
+        sudo mv appimagetool /usr/local/bin/appimagetool
+
     - name: Make AppImage folder
       run: |
         mkdir -p AppDir/usr/bin
         cp dist/QRScanner AppDir/usr/bin/
         mkdir -p AppDir/usr/share/applications
         mkdir -p AppDir/usr/share/icons
-        # Tạo file .desktop
+        # File .desktop
         cat > AppDir/usr/share/applications/QRScanner.desktop <<EOF
         [Desktop Entry]
         Type=Application
@@ -41,20 +49,26 @@ jobs:
         Icon=QRScanner
         Categories=Utility;
         EOF
-        # Tạo icon placeholder
-        echo "fake icon" > AppDir/usr/share/icons/QRScanner.png
-
-    - name: Install appimagetool
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y appimagetool
+        # Tạo icon QRScanner
+        convert -size 256x256 xc:white -gravity center \
+          -pointsize 72 -annotate 0 "QR" QRScanner.png
+        cp QRScanner.png AppDir/usr/share/icons/
 
     - name: Build AppImage
       run: |
         appimagetool AppDir QRScanner.AppImage
 
-    - name: Upload AppImage
+    - name: Upload AppImage as Artifact
       uses: actions/upload-artifact@v4
       with:
         name: QRScanner-AppImage
         path: QRScanner.AppImage
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v1.0.${{ github.run_number }}
+        name: QRScanner v1.0.${{ github.run_number }}
+        files: QRScanner.AppImage
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
