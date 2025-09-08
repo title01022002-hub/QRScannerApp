@@ -1,0 +1,53 @@
+name: Build AppImage
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1 fuse
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build binary
+        run: |
+          pyinstaller --onefile --name QRScanner main.py
+          mkdir -p dist_appimage/usr/bin
+          cp dist/QRScanner dist_appimage/usr/bin/
+          echo "[Desktop Entry]
+          Type=Application
+          Name=QRScanner
+          Exec=QRScanner
+          Icon=qrscanner
+          Categories=Utility;" > dist_appimage/QRScanner.desktop
+          mkdir -p dist_appimage/usr/share/icons
+          convert -size 256x256 xc:lightblue -gravity center -pointsize 48 -annotate 0 "QR" dist_appimage/usr/share/icons/qrscanner.png
+
+      - name: Download AppImageTool
+        run: |
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+
+      - name: Build AppImage
+        run: |
+          ./appimagetool-x86_64.AppImage dist_appimage QRScanner.AppImage
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QRScanner.AppImage
+          path: QRScanner.AppImage
