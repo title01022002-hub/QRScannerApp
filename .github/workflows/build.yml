@@ -1,4 +1,4 @@
-name: Build and Release AppImage
+name: Build and Release QRScanner AppImage
 
 on:
   workflow_dispatch:
@@ -8,32 +8,39 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    # 1. Lấy code
     - name: Checkout code
       uses: actions/checkout@v4
 
+    # 2. Cài Python
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
+    # 3. Cài dependencies
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pyinstaller
 
+    # 4. Build binary
     - name: Build binary
       run: |
         pyinstaller --onefile --name QRScanner main.py
 
+    # 5. Cài ImageMagick và tải AppImageTool mới nhất
     - name: Install ImageMagick & AppImageTool
       run: |
         sudo apt-get update
         sudo apt-get install -y imagemagick wget
-        wget https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage -O appimagetool
+        APPIMAGE_URL=$(wget -qO- https://api.github.com/repos/AppImage/AppImageKit/releases/latest | grep browser_download_url | grep appimagetool-x86_64.AppImage | cut -d '"' -f 4)
+        wget "$APPIMAGE_URL" -O appimagetool
         chmod +x appimagetool
         sudo mv appimagetool /usr/local/bin/appimagetool
 
+    # 6. Chuẩn bị folder AppImage
     - name: Make AppImage folder
       run: |
         mkdir -p AppDir/usr/bin
@@ -49,21 +56,24 @@ jobs:
         Icon=QRScanner
         Categories=Utility;
         EOF
-        # Tạo icon QRScanner
+        # Tạo icon chữ QR
         convert -size 256x256 xc:white -gravity center \
           -pointsize 72 -annotate 0 "QR" QRScanner.png
         cp QRScanner.png AppDir/usr/share/icons/
 
+    # 7. Build AppImage
     - name: Build AppImage
       run: |
         appimagetool AppDir QRScanner.AppImage
 
+    # 8. Upload artifact
     - name: Upload AppImage as Artifact
       uses: actions/upload-artifact@v4
       with:
         name: QRScanner-AppImage
         path: QRScanner.AppImage
 
+    # 9. Tạo GitHub Release
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
