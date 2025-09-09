@@ -1,4 +1,4 @@
-name: Build and Release QRScanner AppImage
+name: Build Python AppImage (Advanced)
 
 on:
   workflow_dispatch:
@@ -6,82 +6,80 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64]  # Multi-architecture
 
     steps:
-    # 1. Checkout code
-    - name: Checkout code
-      uses: actions/checkout@v4
+      # 1. Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    # 2. Setup Python
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      # 2. Setup Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-    # 3. Install dependencies
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyinstaller
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-    # 4. Build binary with PyInstaller
-    - name: Build binary
-      run: |
-        pyinstaller --onefile --name QRScanner main.py
+      # 4. Build executable with PyInstaller
+      - name: Build executable
+        run: |
+          pyinstaller --onefile --name myapp myapp.py --icon=myapp.png \
+            --add-data "data:./data" \
+            --add-data "config:./config" \
+            --clean
 
-    # 5. Install ImageMagick & AppImageTool
-    - name: Install ImageMagick & AppImageTool
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y imagemagick wget jq
-        # Lấy AppImageTool mới nhất
-        APPIMAGE_URL=$(curl -s https://api.github.com/repos/AppImage/AppImageKit/releases/latest \
-          | jq -r '.assets[] | select(.name | test("appimagetool.*x86_64.AppImage$")) | .browser_download_url')
-        wget "$APPIMAGE_URL" -O appimagetool
-        chmod +x appimagetool
-        sudo mv appimagetool /usr/local/bin/appimagetool
-
-    # 6. Prepare AppImage folder
-    - name: Prepare AppDir
-      run: |
-        mkdir -p AppDir/usr/bin
-        cp dist/QRScanner AppDir/usr/bin/
-        mkdir -p AppDir/usr/share/applications
-        mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
-
-        # Create .desktop file
-        cat > AppDir/usr/share/applications/QRScanner.desktop <<EOF
+      # 5. Prepare AppDir
+      - name: Prepare AppDir
+        run: |
+          mkdir -p MyApp.AppDir/usr/bin
+          cp dist/myapp MyApp.AppDir/usr/bin/
+          cp myapp.png MyApp.AppDir/
+          # Create AppRun
+          echo '#!/bin/bash' > MyApp.AppDir/AppRun
+          echo 'HERE="$(dirname "$(readlink -f "${0}")")"' >> MyApp.AppDir/AppRun
+          echo '"$HERE/usr/bin/myapp" "$@"' >> MyApp.AppDir/AppRun
+          chmod +x MyApp.AppDir/AppRun
+          # Create .desktop
+          cat <<EOT > MyApp.AppDir/myapp.desktop
 [Desktop Entry]
+Name=MyApp
+Exec=myapp
+Icon=myapp
 Type=Application
-Name=QRScanner
-Exec=QRScanner
-Icon=QRScanner
 Categories=Utility;
-EOF
+EOT
 
-        # Create icon
-        convert -size 256x256 xc:white -gravity center -pointsize 72 -annotate 0 "QR" QRScanner.png
-        cp QRScanner.png AppDir/usr/share/icons/hicolor/256x256/apps/QRScanner.png
+      # 6. Install AppImageTool
+      - name: Install AppImageTool
+        run: |
+          wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
 
-    # 7. Build AppImage
-    - name: Build AppImage
-      run: |
-        appimagetool AppDir QRScanner.AppImage
+      # 7. Build AppImage
+      - name: Build AppImage
+        run: |
+          ARCH=${{ matrix.arch }}
+          echo "Building AppImage for $ARCH"
+          if [ "$ARCH" = "aarch64" ]; then
+            # Cross-build ARM64 using Docker or qemu (Ubuntu supports binfmt)
+            sudo apt-get update && sudo apt-get install -y qemu-user-static
+            docker run --rm -v $PWD:/project -w /project --platform linux/arm64 ubuntu \
+              bash -c "./appimagetool-x86_64.AppImage MyApp.AppDir MyApp-aarch64.AppImage"
+          else
+            ./appimagetool-x86_64.AppImage MyApp.AppDir MyApp-x86_64.AppImage
+          fi
 
-    # 8. Upload AppImage artifact
-    - name: Upload AppImage as Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: QRScanner-AppImage
-        path: QRScanner.AppImage
-
-    # 9. Create GitHub Release
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: v1.0.${{ github.run_number }}
-        name: QRScanner v1.0.${{ github.run_number }}
-        files: QRScanner.AppImage
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # 8. Upload artifacts
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyApp-AppImage
+          path: MyApp-*.AppImage
